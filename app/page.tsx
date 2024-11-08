@@ -1,101 +1,120 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect } from "react";
+import { useInView } from "react-intersection-observer";
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  startAfter,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Header } from "@/components/Header";
+import { PlatformFilter } from "@/components/PlatformFilter";
+import { SocialMediaCard } from "@/components/SocialMediaCard";
+import { AddSavageryModal } from "@/components/AddSavageryModal";
+
+type Platform = "Reddit" | "YouTube" | "Facebook" | "X" | "Instagram";
+
+interface SocialMediaPost {
+  id: string;
+  platform: Platform;
+  votes: number;
+  timestamp: number;
+  imageUrl: string;
+  sourceLink?: string;
+}
+
+const POSTS_PER_PAGE = 12;
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [posts, setPosts] = useState<SocialMediaPost[]>([]);
+  const [filter, setFilter] = useState<Platform | "All">("All");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isAddSavageryOpen, setIsAddSavageryOpen] = useState(false);
+  const [lastVisible, setLastVisible] = useState<any>(null);
+  const [ref, inView] = useInView();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+  const fetchPosts = async (isInitial = false) => {
+    let q = query(
+      collection(db, "posts"),
+      orderBy("timestamp", "desc"),
+      limit(POSTS_PER_PAGE)
+    );
+
+    if (!isInitial && lastVisible) {
+      q = query(
+        collection(db, "posts"),
+        orderBy("timestamp", "desc"),
+        startAfter(lastVisible),
+        limit(POSTS_PER_PAGE)
+      );
+    }
+
+    const querySnapshot = await getDocs(q);
+    const newPosts = querySnapshot.docs.map(
+      (doc) => ({ id: doc.id, ...doc.data() } as SocialMediaPost)
+    );
+
+    if (isInitial) {
+      setPosts(newPosts);
+    } else {
+      setPosts((prevPosts) => [...prevPosts, ...newPosts]);
+    }
+
+    if (querySnapshot.docs.length > 0) {
+      setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts(true);
+  }, []);
+
+  useEffect(() => {
+    if (inView) {
+      fetchPosts();
+    }
+  }, [inView]);
+
+  const filteredPosts = posts
+    .filter((post) => filter === "All" || post.platform === filter)
+    .filter((post) =>
+      post.platform.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+  const handleSearch = (term: string) => {
+    setSearchTerm(term);
+  };
+
+  const handleAddSavagery = () => {
+    fetchPosts(true);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      <div className="container mx-auto px-4 py-8">
+        <Header
+          onOpenAddSavagery={() => setIsAddSavageryOpen(true)}
+          onSearch={handleSearch}
+        />
+        <PlatformFilter filter={filter} setFilter={setFilter} />
+        <main>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredPosts.map((post) => (
+              <SocialMediaCard key={post.id} post={post} />
+            ))}
+          </div>
+          <div ref={ref} className="h-10" />
+        </main>
+      </div>
+      <AddSavageryModal
+        isOpen={isAddSavageryOpen}
+        onClose={() => setIsAddSavageryOpen(false)}
+        onSubmit={handleAddSavagery}
+      />
     </div>
   );
 }
